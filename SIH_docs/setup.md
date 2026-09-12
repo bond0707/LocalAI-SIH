@@ -43,20 +43,19 @@ ollama serve
 Pull the recommended open-weight models aligned with MRPL problem statement tasks:
 
 ```powershell
-# 1. Coding, Sandboxed Execution & Calculations (7B parameter)
-ollama pull qwen2.5-coder:7b
+# 1. Primary Reasoning, Coding & Analysis (9B parameter, ~6.6 GB)
+ollama pull qwen3.5:9b
 
-# 2. General Reasoning, Approval Notes & Document Summaries (8B parameter)
-ollama pull llama3.1:8b
-
-# 3. Deep Reasoning & Logic (Distilled Reasoning Model)
+# 2. Deep Reasoning & Logic (Distilled Reasoning Model, 8B parameter, ~5.2 GB)
 ollama pull deepseek-r1:8b
 
-# 4. Multimodal Vision (For P&ID drawings, inspection photos & charts)
-ollama pull qwen2-vl:7b
-# (Alternative vision model: ollama pull llava:7b)
+# 3. Lightweight Fast Tasks & Calculations (1.7B parameter, ~1.8 GB)
+ollama pull smollm2:1.7b
 
-# 5. Local Embedding Model (For Knowledge Base RAG)
+# 4. Ultra-Compact Fast Reasoning & Edge Execution (0.8B parameter, ~1.0 GB)
+ollama pull qwen3.5:0.8b
+
+# Optional: Local Embedding Model (For Knowledge Base RAG via Ollama)
 ollama pull nomic-embed-text
 ```
 
@@ -66,6 +65,16 @@ Check that your models are available:
 
 ```powershell
 ollama list
+```
+
+Expected output:
+
+```text
+NAME              ID              SIZE      MODIFIED
+qwen3.5:9b        6488c96fa5fa    6.6 GB    2 days ago
+qwen3.5:0.8b      f3817196d142    1.0 GB    2 days ago
+smollm2:1.7b      cef4a1e09247    1.8 GB    3 days ago
+deepseek-r1:8b    6995872bfe4c    5.2 GB    3 days ago
 ```
 
 ---
@@ -237,7 +246,7 @@ By default, the Vite development server runs on **`http://localhost:5173`** (or 
 3. **Verify Model Detection**:
 
    * On the chat page, click the model selector in the top-left corner.
-   * Ensure `qwen2.5-coder:7b`, `llama3.1:8b`, `deepseek-r1:8b`, and `qwen2-vl:7b` appear in the list.
+   * Ensure `qwen3.5:9b`, `deepseek-r1:8b`, `smollm2:1.7b`, and `qwen3.5:0.8b` appear in the list.
 4. **Verify Knowledge Base (RAG)**:
 
    * Go to **Workspace $\rightarrow$ Knowledge**.
@@ -274,9 +283,10 @@ To run Python code and engineering calculations safely in an isolated sandbox:
 
 ## 7. Quick Start Script Summary
 
-| Component          | Working Directory      | Command                                                                             | URL                           |
-| :----------------- | :--------------------- | :---------------------------------------------------------------------------------- | :---------------------------- |
-| **Ollama**   | Any                    | `ollama serve`                                                                    | `http://localhost:11434`    |
+
+| Component    | Working Directory    | Command                                                                           | URL                         |
+| :----------- | :------------------- | :-------------------------------------------------------------------------------- | :-------------------------- |
+| **Ollama**   | Any                  | `ollama serve`                                                                    | `http://localhost:11434`    |
 | **Backend**  | `open-webui/backend` | `.\.venv\Scripts\Activate.ps1; python -m uvicorn open_webui.main:app --port 8080` | `http://localhost:8080/api` |
 | **Frontend** | `open-webui`         | `npm run dev`                                                                     | `http://localhost:5173`     |
 
@@ -289,7 +299,7 @@ To run Python code and engineering calculations safely in an isolated sandbox:
 * **Port 8080 / 5173 Already in Use**:
   Pass alternative ports: `--port 8081` for backend, or `npm run dev -- --port 5174` for frontend.
 * **Out of Memory (OOM) during Model Loading**:
-  If GPU VRAM is constrained, run smaller quantized models (e.g., `qwen2.5-coder:1.5b`, `llama3.2:3b`, `qwen2-vl:2b`). Ollama automatically offloads excess layers to system RAM if VRAM is exceeded.
+  If GPU VRAM is constrained, switch to smaller models already configured (e.g., `smollm2:1.7b` or `qwen3.5:0.8b`). Ollama automatically offloads excess layers to system RAM if VRAM is exceeded.
 * **Air-Gap Verification**:
   To demonstrate zero cloud egress, disconnect your Wi-Fi/Ethernet or monitor active connections using:
   ```powershell

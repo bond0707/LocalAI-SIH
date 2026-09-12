@@ -12,8 +12,8 @@ This document provides complete, step-by-step instructions to run the entire sov
 
 * **Processor**: Apple Silicon (M1/M2/M3/M4 Pro, Max, or Ultra recommended) or Intel Core i7/i9.
 * **Unified Memory / RAM**: 
-  * Minimum 16 GB Unified Memory (runs 7B/8B models comfortably).
-  * 32 GB – 64 GB+ Unified Memory recommended for running larger models (14B/32B) or multiple models concurrently.
+  * Minimum 16 GB Unified Memory (runs 8B/9B models comfortably).
+  * 32 GB – 64 GB+ Unified Memory recommended for running larger models or multiple models concurrently.
 * **Storage**: At least 30 GB free SSD space for macOS, virtual environments, and Ollama model weights.
 
 ### Installed Software
@@ -55,20 +55,19 @@ Ollama runs natively on macOS and automatically leverages Apple Silicon's Unifie
 Open a Terminal window (`zsh`) and pull the recommended open-weight models aligned with MRPL problem statement tasks:
 
 ```bash
-# 1. Coding, Sandboxed Execution & Calculations (7B parameter)
-ollama pull qwen2.5-coder:7b
+# 1. Primary Reasoning, Coding & Analysis (9B parameter, ~6.6 GB)
+ollama pull qwen3.5:9b
 
-# 2. General Reasoning, Approval Notes & Document Summaries (8B parameter)
-ollama pull llama3.1:8b
-
-# 3. Deep Reasoning & Logic (Distilled Reasoning Model)
+# 2. Deep Reasoning & Logic (Distilled Reasoning Model, 8B parameter, ~5.2 GB)
 ollama pull deepseek-r1:8b
 
-# 4. Multimodal Vision (For P&ID drawings, inspection photos & charts)
-ollama pull qwen2-vl:7b
-# (Alternative vision model: ollama pull llava:7b)
+# 3. Lightweight Fast Tasks & Calculations (1.7B parameter, ~1.8 GB)
+ollama pull smollm2:1.7b
 
-# 5. Local Embedding Model (For Knowledge Base RAG)
+# 4. Ultra-Compact Fast Reasoning & Edge Execution (0.8B parameter, ~1.0 GB)
+ollama pull qwen3.5:0.8b
+
+# Optional: Local Embedding Model (For Knowledge Base RAG via Ollama)
 ollama pull nomic-embed-text
 ```
 
@@ -78,6 +77,15 @@ Verify that your models are installed and accessible:
 
 ```bash
 ollama list
+```
+
+Expected output:
+```text
+NAME              ID              SIZE      MODIFIED
+qwen3.5:9b        6488c96fa5fa    6.6 GB    2 days ago
+qwen3.5:0.8b      f3817196d142    1.0 GB    2 days ago
+smollm2:1.7b      cef4a1e09247    1.8 GB    3 days ago
+deepseek-r1:8b    6995872bfe4c    5.2 GB    3 days ago
 ```
 
 ---
@@ -254,7 +262,7 @@ By default, the Vite development server runs on **`http://localhost:5173`** (or 
    * All user accounts and encrypted passwords reside strictly on-premise in `backend/data/webui.db`.
 3. **Verify Model Detection**:
    * On the chat page, click the model selector in the top-left corner.
-   * Verify that `qwen2.5-coder:7b`, `llama3.1:8b`, `deepseek-r1:8b`, and `qwen2-vl:7b` appear in the dropdown.
+   * Verify that `qwen3.5:9b`, `deepseek-r1:8b`, `smollm2:1.7b`, and `qwen3.5:0.8b` appear in the dropdown.
 4. **Verify Knowledge Base (RAG)**:
    * Go to **Workspace $\rightarrow$ Knowledge**.
    * Click `+` to create a Knowledge Base (e.g., `MRPL-Refinery-SOPs`).
@@ -318,7 +326,7 @@ To run Python code and engineering calculations safely in an isolated sandbox:
   # Check system unified memory usage
   top -o mem
   ```
-  If memory pressure is high, unload inactive models via `ollama stop <model_name>` or use smaller quantized variants (e.g., `qwen2.5-coder:1.5b` or `llama3.2:3b`).
+  If memory pressure is high, unload inactive models via `ollama stop <model_name>` or use smaller variants (e.g., `smollm2:1.7b` or `qwen3.5:0.8b`).
 * **Air-Gap Verification on macOS**:
   To confirm zero cloud egress, disconnect Wi-Fi / Ethernet or monitor active outbound sockets:
   ```bash
