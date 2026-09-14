@@ -46,7 +46,6 @@ asgiref==3.11.1
 # AI libraries
 tiktoken==0.13.0
 mcp==1.27.2
-routellm>=0.2.0
 
 openai==2.29.0
 anthropic==0.86.0
@@ -158,5 +157,3 @@ opentelemetry-instrumentation-logging==0.63b1
 opentelemetry-instrumentation-httpx==0.63b1
 opentelemetry-instrumentation-aiohttp-client==0.63b1
 opentelemetry-instrumentation-system-metrics==0.63b1
-
-routellm

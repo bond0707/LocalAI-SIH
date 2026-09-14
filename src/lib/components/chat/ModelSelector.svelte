@@ -67,13 +67,11 @@
 					bind:this={selector}
 					id="model"
 					placeholder={$i18n.t('Select a model')}
-					items={$models
-						.filter((model) => model?.owned_by !== 'arena' && model?.id !== 'arena-model')
-						.map((model) => ({
-							value: model.id,
-							label: model.name,
-							model: model
-						}))}
+					items={$models.map((model) => ({
+						value: model.id,
+						label: model.name,
+						model: model
+					}))}
 					{pinModelHandler}
 					{className}
 					{triggerClassName}

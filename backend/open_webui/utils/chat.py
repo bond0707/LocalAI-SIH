@@ -245,45 +245,11 @@ async def generate_chat_completion(
                 if selected_model:
                     await check_model_access(user, selected_model)
 
-        # Fallback: if generate_chat_completion is called with RouteLLM router model directly
-        if not selected_model_id and (model.get('owned_by') == 'router' or model.get('id') == 'routellm-auto-router'):
-            from open_webui.routellm_router import router_controller
-            available_model_ids = [
-                m['id']
-                for m in list(request.app.state.MODELS.values())
-                if m.get('owned_by') not in ('arena', 'router') and m.get('id') != 'routellm-auto-router'
-            ]
-            last_prompt = ""
-            for msg in reversed(form_data.get("messages", [])):
-                if msg.get("role") == "user":
-                    c = msg.get("content", "")
-                    if isinstance(c, str):
-                        last_prompt = c
-                    elif isinstance(c, list):
-                        last_prompt = "\n".join(
-                            part.get("text", "") for part in c if isinstance(part, dict) and part.get("type") == "text"
-                        )
-                    break
-            routing_res = router_controller.route_request(last_prompt, available_models=available_model_ids)
-            selected_model_id = routing_res['selected_model_id']
-            metadata['routing_info'] = routing_res
-            form_data['model'] = selected_model_id
-
-            if not bypass_filter and user.role == 'user':
-                selected_model = request.app.state.MODELS.get(selected_model_id)
-                if selected_model:
-                    await check_model_access(user, selected_model)
-
         if selected_model_id:
-            routing_info = metadata.get('routing_info')
             if form_data.get('stream') == True:
 
                 async def stream_wrapper(stream):
                     yield f'data: {JSONCodec.dumps({"selected_model_id": selected_model_id})}\n\n'
-                    payload = {"selected_model_id": selected_model_id}
-                    if routing_info:
-                        payload["routing_info"] = routing_info
-                    yield f'data: {JSONCodec.dumps(payload)}\n\n'
                     async for chunk in stream:
                         yield chunk
 
@@ -312,18 +278,6 @@ async def generate_chat_completion(
                     ),
                     'selected_model_id': selected_model_id,
                 }
-                res = await generate_chat_completion(
-                    request,
-                    form_data,
-                    user,
-                    bypass_filter=True,
-                    bypass_system_prompt=bypass_system_prompt,
-                )
-                if isinstance(res, dict):
-                    res['selected_model_id'] = selected_model_id
-                    if routing_info:
-                        res['routing_info'] = routing_info
-                return res
 
         if model.get('pipe'):
             # Below does not require bypass_filter because this is the only route the uses this function and it is already bypassing the filter

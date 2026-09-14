@@ -69,14 +69,6 @@ async function loadPyodideAndPackages(packages: string[] = []) {
 		self.pyodide.FS.mkdirTree(uploadDir);
 	}
 
-	// Ensure /mnt/output exists for file generation
-	const outputDir = '/mnt/output';
-	try {
-		self.pyodide.FS.stat(outputDir);
-	} catch {
-		self.pyodide.FS.mkdirTree(outputDir);
-	}
-
 	const micropip = self.pyodide.pyimport('micropip');
 	await micropip.install(packages);
 }
@@ -179,72 +171,6 @@ function fsMkdir(path: string) {
 }
 
 // ---------------------------------------------------------------------------
-// MIME type map & file emission for document generation
-// ---------------------------------------------------------------------------
-
-const MIME_TYPES: Record<string, string> = {
-	pdf: 'application/pdf',
-	docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-	doc: 'application/msword',
-	pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-	ppt: 'application/vnd.ms-powerpoint',
-	xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-	xls: 'application/vnd.ms-excel',
-	csv: 'text/csv',
-	txt: 'text/plain',
-	json: 'application/json',
-	html: 'text/html',
-	xml: 'application/xml',
-	zip: 'application/zip',
-	png: 'image/png',
-	jpg: 'image/jpeg',
-	jpeg: 'image/jpeg',
-	gif: 'image/gif',
-	svg: 'image/svg+xml'
-};
-
-function getMimeType(filename: string): string {
-	const ext = filename.split('.').pop()?.toLowerCase() ?? '';
-	return MIME_TYPES[ext] || 'application/octet-stream';
-}
-
-/**
- * Scan /mnt/output/ for files written by user code, encode each as a
- * data URI line on stdout, then delete the file so it isn't re-emitted.
- */
-function emitOutputFiles(): void {
-	if (!self.pyodide) return;
-	try {
-		const names = (self.pyodide.FS.readdir('/mnt/output') as string[]).filter(
-			(n) => n !== '.' && n !== '..'
-		);
-		for (const name of names) {
-			const filePath = `/mnt/output/${name}`;
-			try {
-				const stat = self.pyodide.FS.stat(filePath);
-				if (self.pyodide.FS.isDir(stat.mode)) continue;
-				const data: Uint8Array = self.pyodide.FS.readFile(filePath) as unknown as Uint8Array;
-				// Convert to base64
-				let binary = '';
-				for (let j = 0; j < data.length; j++) {
-					binary += String.fromCharCode(data[j]);
-				}
-				const b64 = btoa(binary);
-				const mime = getMimeType(name);
-				const line = `data:${mime};name=${name};base64,${b64}`;
-				self.stdout = self.stdout ? self.stdout + line + '\n' : line + '\n';
-				// Clean up emitted file
-				self.pyodide.FS.unlink(filePath);
-			} catch {
-				// skip unreadable files
-			}
-		}
-	} catch {
-		// /mnt/output doesn't exist yet, that's fine
-	}
-}
-
-// ---------------------------------------------------------------------------
 // Code execution
 // ---------------------------------------------------------------------------
 
@@ -305,9 +231,6 @@ matplotlib.pyplot.show = show`);
 	} catch (error: unknown) {
 		self.stderr = error instanceof Error ? error.message : String(error);
 	}
-
-	// Emit any files written to /mnt/output/ as data URIs
-	emitOutputFiles();
 
 	self.postMessage({ id, result: self.result, stdout: self.stdout, stderr: self.stderr });
 }

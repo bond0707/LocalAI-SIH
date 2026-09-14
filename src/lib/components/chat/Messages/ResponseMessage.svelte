@@ -182,9 +182,6 @@
 
 	let model = null;
 	$: model = $models.find((m) => m.id === message.model);
-	$: model =
-		$models.find((m) => m.id === (message?.selectedModelId ?? message.model)) ??
-		$models.find((m) => m.id === message.model);
 
 	$: statusEntries = message?.statusHistory ?? [...(message?.status ? [message?.status] : [])];
 	$: hasVisibleStatus =
@@ -674,30 +671,13 @@
 
 		<div class="flex-auto w-0 pl-1 relative">
 			{#if !compactPreview}
-				<div class="flex items-center gap-2 flex-wrap mb-1">
-					<Name>
-						<Tooltip content={model?.name ?? message.model} placement="top-start">
-							<span id="response-message-model-name" class="line-clamp-1 text-black dark:text-white">
-								{model?.name ?? message.model}
-							</span>
-						</Tooltip>
-					</Name>
-
-					{#if message?.routingInfo || (message?.selectedModelId && (message?.model === 'routellm-auto-router' || message?.model !== message?.selectedModelId))}
-						{@const rInfo = message?.routingInfo}
-						{@const scoreLabel = rInfo?.score ? `${Math.round(rInfo.score * 100)}%` : ''}
-						<Tooltip
-							content={`${rInfo?.reason ? `Reason: ${rInfo.reason} | ` : ''}Engine: RouteLLM Sovereign Task Router`}
-							placement="top"
-						>
-							<span
-								class="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-emerald-500/10 text-emerald-600 dark:bg-emerald-400/15 dark:text-emerald-300 border border-emerald-500/25 shadow-xs cursor-default select-none"
-							>
-								<span>Auto-routed to {model?.name ?? message.selectedModelId}</span>
-							</span>
-						</Tooltip>
-					{/if}
-				</div>
+				<Name>
+					<Tooltip content={model?.name ?? message.model} placement="top-start">
+						<span id="response-message-model-name" class="line-clamp-1 text-black dark:text-white">
+							{model?.name ?? message.model}
+						</span>
+					</Tooltip>
+				</Name>
 			{/if}
 
 			<div>
@@ -751,7 +731,12 @@
 						{/if}
 
 						{#if edit === true}
-							<div class="w-full bg-gray-50 dark:bg-gray-800 rounded-3xl px-3 py-3 my-2">
+							<div
+								class="w-full bg-gray-50 dark:bg-gray-800 rounded-3xl px-3 py-3 my-2 {($settings?.highContrastMode ??
+								false)
+									? 'focus-within:outline focus-within:outline-2 focus-within:-outline-offset-2 focus-within:outline-blue-500'
+									: ''}"
+							>
 								{#if editedOutput}
 									<!-- Structured output editor (visual + JSON toggle) -->
 									<OutputEditView
@@ -765,7 +750,7 @@
 									<textarea
 										id="message-edit-{message.id}"
 										bind:this={editTextAreaElement}
-										class=" bg-transparent outline-hidden w-full resize-none text-[0.9375rem]"
+										class=" bg-transparent outline-hidden focus-visible:outline-none! w-full resize-none text-[0.9375rem]"
 										bind:value={editedContent}
 										on:input={(e) => {
 											const messagesContainer = document.getElementById('messages-container');

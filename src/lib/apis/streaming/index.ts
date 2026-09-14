@@ -8,8 +8,6 @@ type TextStreamUpdate = {
 	sources?: any;
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	selectedModelId?: any;
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	routingInfo?: any;
 	error?: any;
 	usage?: ResponseUsage;
 };
@@ -76,12 +74,6 @@ async function* openAIStreamToIterator(
 
 			if (parsedData.selected_model_id) {
 				yield { done: false, value: '', selectedModelId: parsedData.selected_model_id };
-				yield {
-					done: false,
-					value: '',
-					selectedModelId: parsedData.selected_model_id,
-					routingInfo: parsedData.routing_info
-				};
 				continue;
 			}
 

@@ -175,61 +175,23 @@ class PptxLoader:
         self.file_path = file_path
 
     def load(self) -> list[Document]:
-        try:
-            from pptx import Presentation
+        from pptx import Presentation
 
-            prs = Presentation(self.file_path)
-            text_parts = []
-            for i, slide in enumerate(prs.slides, 1):
-                slide_texts = []
-                for shape in slide.shapes:
-                    if shape.has_text_frame:
-                        slide_texts.append(shape.text_frame.text)
-                if slide_texts:
-                    text_parts.append(f'Slide {i}:\n' + '\n'.join(slide_texts))
-            return [
-                Document(
-                    page_content='\n\n'.join(text_parts),
-                    metadata={'source': self.file_path},
-                )
-            ]
-        except Exception as e:
-            log.warning(f'pptx failed to parse {self.file_path}: {e}. Falling back to binary text extraction.')
-            try:
-                with open(self.file_path, 'rb') as f:
-                    raw_bytes = f.read()
-                import re
-                extracted = re.findall(rb'[\x20-\x7E]{4,}', raw_bytes)
-                clean_text = ' '.join(b.decode('latin-1', 'ignore') for b in extracted)
-                return [
-                    Document(
-                        page_content=clean_text or '<No text content found>',
-                        metadata={'source': self.file_path},
-                    )
-                ]
-            except Exception as read_err:
-                log.error(f'Failed to read {self.file_path}: {read_err}')
-                raise e
-
-
-class PowerPointLoader:
-    def __init__(self, file_path):
-        self.file_path = file_path
-
-    def load(self) -> list[Document]:
-        file_ext = self.file_path.split('.')[-1].lower() if '.' in self.file_path else ''
-        if file_ext == 'pptx':
-            try:
-                return PptxLoader(self.file_path).load()
-            except Exception as e:
-                log.debug(f'PptxLoader failed on pptx ({e}), trying Unstructured')
-        try:
-            from langchain_community.document_loaders import UnstructuredPowerPointLoader
-
-            return UnstructuredPowerPointLoader(self.file_path).load()
-        except Exception as e:
-            log.warning(f'Unstructured PowerPoint loader failed ({e}), falling back to PptxLoader.')
-            return PptxLoader(self.file_path).load()
+        prs = Presentation(self.file_path)
+        text_parts = []
+        for i, slide in enumerate(prs.slides, 1):
+            slide_texts = []
+            for shape in slide.shapes:
+                if shape.has_text_frame:
+                    slide_texts.append(shape.text_frame.text)
+            if slide_texts:
+                text_parts.append(f'Slide {i}:\n' + '\n'.join(slide_texts))
+        return [
+            Document(
+                page_content='\n\n'.join(text_parts),
+                metadata={'source': self.file_path},
+            )
+        ]
 
 
 class TikaLoader:
@@ -311,25 +273,12 @@ class DoclingLoader:
             )
         if r.ok:
             result = r.json()
-            if isinstance(result, dict) and result.get('status') == 'failure':
-                errors = result.get('errors') or []
-                err_messages = [
-                    err.get('error_message')
-                    for err in errors
-                    if isinstance(err, dict) and err.get('error_message')
-                ]
-                error_details = '; '.join(err_messages) if err_messages else 'Document conversion failed'
-                raise Exception(f'Docling conversion error: {error_details}')
-
-            document_data = result.get('document') if isinstance(result, dict) else {}
-            if not isinstance(document_data, dict):
-                document_data = {}
-
-            md_content = document_data.get('md_content') or document_data.get('text_content') or ''
+            document_data = result.get('document', {})
+            md_content = document_data.get('md_content', '')
             text = md_content or '<No text content found>'
 
             metadata = {'Content-Type': self.mime_type} if self.mime_type else {}
-            if md_content and page_break_marker in md_content:
+            if page_break_marker in md_content:
                 documents = [
                     Document(page_content=page.strip(), metadata={**metadata, 'page': page_idx})
                     for page_idx, page in enumerate(md_content.split(page_break_marker))
@@ -346,7 +295,7 @@ class DoclingLoader:
             if r.text:
                 try:
                     error_data = r.json()
-                    if isinstance(error_data, dict) and 'detail' in error_data:
+                    if 'detail' in error_data:
                         error_msg += f' - {error_data["detail"]}'
                 except Exception:
                     error_msg += f' - {r.text}'
@@ -363,22 +312,7 @@ class Loader:
 
     def load(self, filename: str, file_content_type: str, file_path: str) -> list[Document]:
         loader = self._get_loader(filename, file_content_type, file_path)
-        try:
-            docs = loader.load()
-        except Exception as e:
-            if self.engine and self.engine not in ['', 'default']:
-                log.warning(
-                    f"Extraction engine '{self.engine}' failed to process '{filename}': {e}. "
-                    "Falling back to default document loader."
-                )
-                try:
-                    fallback_loader = self._get_default_loader(filename, file_content_type, file_path)
-                    docs = fallback_loader.load()
-                except Exception as fallback_err:
-                    log.error(f"Fallback loader also failed for '{filename}': {fallback_err}")
-                    raise e
-            else:
-                raise e
+        docs = loader.load()
         return [Document(page_content=ftfy.fix_text(doc.page_content), metadata=doc.metadata) for doc in docs]
 
     async def aload(self, filename: str, file_content_type: str, file_path: str) -> list[Document]:
@@ -732,122 +666,127 @@ class Loader:
                 file_path=file_path,
             )
         else:
-            loader = self._get_default_loader(filename, file_content_type, file_path)
+            if file_ext == 'pdf':
+                loader = PyPDFLoader(
+                    file_path,
+                    extract_images=self.kwargs.get('PDF_EXTRACT_IMAGES'),
+                    mode=self.kwargs.get('PDF_LOADER_MODE', 'page'),
+                )
+            elif file_ext == 'csv':
+                loader = CSVLoaderWithSummary(
+                    file_path,
+                    filename,
+                    self._detect_text_encoding(file_path),
+                )
+            elif file_ext == 'rst':
+                try:
+                    from langchain_community.document_loaders import UnstructuredRSTLoader
+
+                    loader = UnstructuredRSTLoader(file_path, mode='elements')
+                except ImportError:
+                    log.warning(
+                        "The 'unstructured' package is not installed. "
+                        'Falling back to plain text loading for .rst file. '
+                        'Install it with: pip install unstructured'
+                    )
+                    loader = TextLoader(file_path, encoding=self._detect_text_encoding(file_path))
+            elif file_ext == 'xml':
+                try:
+                    from langchain_community.document_loaders import UnstructuredXMLLoader
+
+                    loader = UnstructuredXMLLoader(file_path)
+                except ImportError:
+                    log.warning(
+                        "The 'unstructured' package is not installed. "
+                        'Falling back to plain text loading for .xml file. '
+                        'Install it with: pip install unstructured'
+                    )
+                    loader = TextLoader(file_path, encoding=self._detect_text_encoding(file_path))
+            elif file_ext in ['htm', 'html']:
+                loader = BSHTMLLoader(file_path, open_encoding='unicode_escape')
+            elif file_ext == 'md':
+                loader = TextLoader(file_path, encoding=self._detect_text_encoding(file_path))
+            elif file_content_type == 'application/epub+zip':
+                try:
+                    from langchain_community.document_loaders import UnstructuredEPubLoader
+
+                    loader = UnstructuredEPubLoader(file_path)
+                except ImportError:
+                    raise ValueError(
+                        "Processing .epub files requires the 'unstructured' package. "
+                        'Install it with: pip install unstructured'
+                    )
+            elif (
+                file_content_type == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                or file_ext == 'docx'
+            ):
+                loader = Docx2txtLoader(file_path)
+            elif file_ext == 'doc' or file_content_type == 'application/msword':
+                try:
+                    from langchain_community.document_loaders import UnstructuredWordDocumentLoader
+
+                    loader = UnstructuredWordDocumentLoader(file_path)
+                except ImportError:
+                    raise ValueError(
+                        "Processing .doc files requires the 'unstructured' package. "
+                        'Install it with: pip install unstructured'
+                    )
+            elif file_content_type in [
+                'application/vnd.ms-excel',
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            ] or file_ext in ['xls', 'xlsx']:
+                try:
+                    from langchain_community.document_loaders import UnstructuredExcelLoader
+
+                    loader = UnstructuredExcelLoader(file_path)
+                except ImportError:
+                    log.warning(
+                        "The 'unstructured' package is not installed. "
+                        'Falling back to pandas for Excel file loading. '
+                        'Install unstructured for better results: pip install unstructured'
+                    )
+                    loader = ExcelLoader(file_path)
+            elif file_content_type in [
+                'application/vnd.ms-powerpoint',
+                'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            ] or file_ext in ['ppt', 'pptx']:
+                try:
+                    from langchain_community.document_loaders import UnstructuredPowerPointLoader
+
+                    loader = UnstructuredPowerPointLoader(file_path)
+                except ImportError:
+                    log.warning(
+                        "The 'unstructured' package is not installed. "
+                        'Falling back to python-pptx for PowerPoint file loading. '
+                        'Install unstructured for better results: pip install unstructured'
+                    )
+                    loader = PptxLoader(file_path)
+            elif file_ext == 'msg':
+                try:
+                    from langchain_community.document_loaders import (
+                        UnstructuredEmailLoader,
+                    )
+
+                    # unstructured parses .msg via python-oxmsg; avoids extract_msg's beautifulsoup4<4.14 conflict
+                    loader = UnstructuredEmailLoader(file_path, process_attachments=False)
+                except ImportError:
+                    raise ValueError(
+                        "Processing .msg files requires the 'unstructured' package. "
+                        'Install it with: pip install unstructured'
+                    )
+            elif file_ext == 'odt':
+                try:
+                    from langchain_community.document_loaders import UnstructuredODTLoader
+
+                    loader = UnstructuredODTLoader(file_path)
+                except ImportError:
+                    raise ValueError(
+                        "Processing .odt files requires the 'unstructured' package. "
+                        'Install it with: pip install unstructured'
+                    )
+            elif self._is_text_file(file_ext, file_content_type):
+                loader = TextLoader(file_path, encoding=self._detect_text_encoding(file_path))
+            else:
+                loader = TextLoader(file_path, encoding=self._detect_text_encoding(file_path))
 
         return loader
-
-    def _get_default_loader(self, filename: str, file_content_type: str, file_path: str):
-        file_ext = filename.split('.')[-1].lower()
-
-        if file_ext == 'pdf':
-            return PyPDFLoader(
-                file_path,
-                extract_images=self.kwargs.get('PDF_EXTRACT_IMAGES'),
-                mode=self.kwargs.get('PDF_LOADER_MODE', 'page'),
-            )
-        elif file_ext == 'csv':
-            return CSVLoaderWithSummary(
-                file_path,
-                filename,
-                self._detect_text_encoding(file_path),
-            )
-        elif file_ext == 'rst':
-            try:
-                from langchain_community.document_loaders import UnstructuredRSTLoader
-
-                return UnstructuredRSTLoader(file_path, mode='elements')
-            except ImportError:
-                log.warning(
-                    "The 'unstructured' package is not installed. "
-                    'Falling back to plain text loading for .rst file. '
-                    'Install it with: pip install unstructured'
-                )
-                return TextLoader(file_path, encoding=self._detect_text_encoding(file_path))
-        elif file_ext == 'xml':
-            try:
-                from langchain_community.document_loaders import UnstructuredXMLLoader
-
-                return UnstructuredXMLLoader(file_path)
-            except ImportError:
-                log.warning(
-                    "The 'unstructured' package is not installed. "
-                    'Falling back to plain text loading for .xml file. '
-                    'Install it with: pip install unstructured'
-                )
-                return TextLoader(file_path, encoding=self._detect_text_encoding(file_path))
-        elif file_ext in ['htm', 'html']:
-            return BSHTMLLoader(file_path, open_encoding='unicode_escape')
-        elif file_ext == 'md':
-            return TextLoader(file_path, encoding=self._detect_text_encoding(file_path))
-        elif file_content_type == 'application/epub+zip':
-            try:
-                from langchain_community.document_loaders import UnstructuredEPubLoader
-
-                return UnstructuredEPubLoader(file_path)
-            except ImportError:
-                raise ValueError(
-                    "Processing .epub files requires the 'unstructured' package. "
-                    'Install it with: pip install unstructured'
-                )
-        elif (
-            file_content_type == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-            or file_ext == 'docx'
-        ):
-            return Docx2txtLoader(file_path)
-        elif file_ext == 'doc' or file_content_type == 'application/msword':
-            try:
-                from langchain_community.document_loaders import UnstructuredWordDocumentLoader
-
-                return UnstructuredWordDocumentLoader(file_path)
-            except ImportError:
-                raise ValueError(
-                    "Processing .doc files requires the 'unstructured' package. "
-                    'Install it with: pip install unstructured'
-                )
-        elif file_content_type in [
-            'application/vnd.ms-excel',
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        ] or file_ext in ['xls', 'xlsx']:
-            try:
-                from langchain_community.document_loaders import UnstructuredExcelLoader
-
-                return UnstructuredExcelLoader(file_path)
-            except ImportError:
-                log.warning(
-                    "The 'unstructured' package is not installed. "
-                    'Falling back to pandas for Excel file loading. '
-                    'Install unstructured for better results: pip install unstructured'
-                )
-                return ExcelLoader(file_path)
-        elif file_content_type in [
-            'application/vnd.ms-powerpoint',
-            'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-        ] or file_ext in ['ppt', 'pptx']:
-            return PowerPointLoader(file_path)
-        elif file_ext == 'msg':
-            try:
-                from langchain_community.document_loaders import (
-                    UnstructuredEmailLoader,
-                )
-
-                # unstructured parses .msg via python-oxmsg; avoids extract_msg's beautifulsoup4<4.14 conflict
-                return UnstructuredEmailLoader(file_path, process_attachments=False)
-            except ImportError:
-                raise ValueError(
-                    "Processing .msg files requires the 'unstructured' package. "
-                    'Install it with: pip install unstructured'
-                )
-        elif file_ext == 'odt':
-            try:
-                from langchain_community.document_loaders import UnstructuredODTLoader
-
-                return UnstructuredODTLoader(file_path)
-            except ImportError:
-                raise ValueError(
-                    "Processing .odt files requires the 'unstructured' package. "
-                    'Install it with: pip install unstructured'
-                )
-        elif self._is_text_file(file_ext, file_content_type):
-            return TextLoader(file_path, encoding=self._detect_text_encoding(file_path))
-        else:
-            return TextLoader(file_path, encoding=self._detect_text_encoding(file_path))

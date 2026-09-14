@@ -27,7 +27,6 @@ const sandboxScript = String.raw`
 			packages: ['micropip']
 		});
 		pyodide.FS.mkdirTree('/mnt/uploads');
-		pyodide.FS.mkdirTree('/mnt/output');
 		await pyodide.pyimport('micropip').install(packages || []);
 	}
 
@@ -107,64 +106,6 @@ const sandboxScript = String.raw`
 		}
 	}
 
-	var MIME_TYPES = {
-		'pdf': 'application/pdf',
-		'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-		'doc': 'application/msword',
-		'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-		'ppt': 'application/vnd.ms-powerpoint',
-		'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-		'xls': 'application/vnd.ms-excel',
-		'csv': 'text/csv',
-		'txt': 'text/plain',
-		'json': 'application/json',
-		'html': 'text/html',
-		'xml': 'application/xml',
-		'zip': 'application/zip',
-		'png': 'image/png',
-		'jpg': 'image/jpeg',
-		'jpeg': 'image/jpeg',
-		'gif': 'image/gif',
-		'svg': 'image/svg+xml'
-	};
-
-	function getMimeType(filename) {
-		var ext = filename.split('.').pop().toLowerCase();
-		return MIME_TYPES[ext] || 'application/octet-stream';
-	}
-
-	function emitOutputFiles() {
-		try {
-			var names = pyodide.FS.readdir('/mnt/output').filter(function (n) {
-				return n !== '.' && n !== '..';
-			});
-			for (var i = 0; i < names.length; i++) {
-				var name = names[i];
-				var filePath = '/mnt/output/' + name;
-				try {
-					var stat = pyodide.FS.stat(filePath);
-					if (pyodide.FS.isDir(stat.mode)) continue;
-					var data = pyodide.FS.readFile(filePath);
-					var bytes = new Uint8Array(data);
-					var binary = '';
-					for (var j = 0; j < bytes.length; j++) {
-						binary += String.fromCharCode(bytes[j]);
-					}
-					var b64 = btoa(binary);
-					var mime = getMimeType(name);
-					var line = 'data:' + mime + ';name=' + name + ';base64,' + b64;
-					stdout = stdout ? stdout + line + '\n' : line + '\n';
-					// Clean up emitted file
-					pyodide.FS.unlink(filePath);
-				} catch (e) {
-					// skip unreadable files
-				}
-			}
-		} catch (e) {
-			// /mnt/output doesn't exist yet, that's fine
-		}
-	}
-
 	async function patchMatplotlib() {
 		await pyodide.runPythonAsync([
 			'import base64',
@@ -192,16 +133,12 @@ const sandboxScript = String.raw`
 		stderr = null;
 		let result = null;
 		if (files && files.length > 0) upload(files);
-		// Ensure /mnt/output exists for file generation
-		ensureDir('/mnt/output');
 		try {
 			if (code.includes('matplotlib')) await patchMatplotlib();
 			result = clean(await pyodide.runPythonAsync(code));
 		} catch (error) {
 			stderr = error && error.message ? error.message : String(error);
 		}
-		// Emit any files written to /mnt/output/ as data URIs
-		emitOutputFiles();
 		post({ id: id, result: result, stdout: stdout, stderr: stderr });
 	}
 

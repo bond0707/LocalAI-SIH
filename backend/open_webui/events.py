@@ -879,8 +879,6 @@ async def migrate_legacy_webhook_config() -> list[dict[str, Any]]:
 
 
 async def upsert_event_webhook(webhook: dict[str, Any]) -> dict[str, Any]:
-    from open_webui.retrieval.web.utils import validate_url
-
     webhooks = await get_event_webhooks()
     url = str(webhook.get('url') or '').strip()
     if url:
