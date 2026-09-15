@@ -63,9 +63,19 @@ The exact model set depends on available memory and the demonstration being run.
 
 Pull only the models needed for the available hardware. A 9B model requires several gigabytes of storage and memory; smaller models are suitable for constrained demonstrations.
 
-## macOS Setup
+## Platform Setup
 
-The commands below assume this repository is already checked out at `~/Projects/localAI/LocalAI-SIH`. For the complete platform guide, see [SIH_docs/setup_macos.md](SIH_docs/setup_macos.md).
+Choose the instructions for your operating system. All three platforms use the same local services and application ports:
+
+- Ollama API: `http://127.0.0.1:11434`
+- Backend API: `http://127.0.0.1:8080`
+- Vite frontend: `http://localhost:5173`
+
+For the longer platform-specific guides, see [macOS setup](sih_docs/setup_mac.md) and [Windows setup](sih_docs/setup_win.md).
+
+### macOS Setup
+
+The commands below assume this repository is already checked out at `~/Projects/localAI/LocalAI-SIH`.
 
 ### Prerequisites
 
@@ -159,6 +169,89 @@ jupyter kernelgateway --KernelGatewayApp.ip=127.0.0.1 --KernelGatewayApp.port=88
 
 Then select the Jupyter execution engine and set its URL to `http://127.0.0.1:8888` in the administrator settings.
 
+### Linux Setup
+
+These instructions target Ubuntu or Debian-based distributions. Install Python 3.11 or 3.12, Node.js 18 or newer, Git, and Docker Engine or Docker Desktop using your distribution's package manager. Install Ollama from [ollama.com/download/linux](https://ollama.com/download/linux):
+
+```bash
+curl -fsSL https://ollama.com/install.sh | sh
+sudo systemctl enable --now ollama
+```
+
+Start Ollama and pull the models required for the demonstration:
+
+```bash
+ollama serve
+ollama pull qwen3.5:9b
+ollama pull deepseek-r1:8b
+ollama pull qwen2.5-coder:7b
+ollama pull llava:7b
+ollama pull nomic-embed-text
+```
+
+Set up the backend from the repository root:
+
+```bash
+cd /path/to/LocalAI-SIH/backend
+python3.11 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+python -m uvicorn open_webui.main:app --host 127.0.0.1 --port 8080 --reload
+```
+
+In a second terminal, install and run the frontend:
+
+```bash
+cd /path/to/LocalAI-SIH
+npm install
+npm run dev
+```
+
+For Docker-backed PostgreSQL, Qdrant, Docling, and Open Terminal services, use the project compose configuration after reviewing the enabled services:
+
+```bash
+docker compose up -d
+```
+
+### Windows Setup
+
+Install Python 3.11 or 3.12, Node.js 18 or newer, Git, Docker Desktop, and Ollama from [ollama.com/download](https://ollama.com/download). Run the following commands in PowerShell:
+
+```powershell
+ollama serve
+ollama pull qwen3.5:9b
+ollama pull deepseek-r1:8b
+ollama pull qwen2.5-coder:7b
+ollama pull llava:7b
+ollama pull nomic-embed-text
+```
+
+Set up and start the backend:
+
+```powershell
+cd C:\path\to\LocalAI-SIH\backend
+py -3.11 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+python -m uvicorn open_webui.main:app --host 127.0.0.1 --port 8080 --reload
+```
+
+If PowerShell blocks activation, run `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` and activate the environment again. In a second PowerShell window, start the frontend:
+
+```powershell
+cd C:\path\to\LocalAI-SIH
+npm install
+npm run dev
+```
+
+Use Docker Desktop for the optional PostgreSQL, Qdrant, Docling, and Open Terminal services:
+
+```powershell
+docker compose up -d
+```
+
 ## First Verification Checklist
 
 1. Confirm `ollama list` shows the intended local models.
@@ -180,7 +273,7 @@ The intended SIH demonstration sequence is:
 4. **Multimodal analysis:** inspect a scanned report, handwritten note, P&ID, or plant photograph with local OCR and vision.
 5. **Sovereignty proof:** run the workflow while showing that connections remain local, or repeat it with network adapters disabled.
 
-The second, third, fourth, and fifth scenarios currently require additional implementation or validation described in [SIH_docs/task.md](SIH_docs/task.md).
+The second, third, fourth, and fifth scenarios currently require additional implementation or validation described in [sih_docs/task.md](sih_docs/task.md).
 
 ## Repository Guide
 
@@ -189,11 +282,10 @@ The second, third, fourth, and fifth scenarios currently require additional impl
 | `backend/open_webui/` | FastAPI backend, retrieval, routing, tools, and application services |
 | `src/` | Svelte frontend |
 | `backend/data/` | Local database, uploads, cache, and vector data |
-| `SIH_docs/problem_statement.md` | MRPL problem statement and evaluation requirements |
-| `SIH_docs/task.md` | Implementation tracker and demonstration checklist |
-| `SIH_docs/setup_macos.md` | Detailed macOS setup guide |
-| `SIH_docs/setup.md` | Windows and Linux setup guide |
-| `SIH_docs/docling_setup.md` | Optional Docling OCR service setup |
+| `sih_docs/problem_statement.md` | MRPL problem statement and evaluation requirements |
+| `sih_docs/task.md` | Implementation tracker and demonstration checklist |
+| `sih_docs/setup_mac.md` | Detailed macOS setup guide |
+| `sih_docs/setup_win.md` | Detailed Windows setup guide |
 
 ## Security and Scope
 
