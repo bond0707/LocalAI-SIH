@@ -10,3 +10,9 @@ Pipfile
 /data/*
 /open_webui/data/*
 .webui_secret_key
+
+# Runtime copied frontend assets
+/open_webui/static/*
+!/open_webui/static/assets/
+!/open_webui/static/fonts/
+!/open_webui/static/swagger-ui/
