@@ -1,8 +1,8 @@
-# Sovereign Industrial AI Workbench
+# LocalAI — Sovereign Industrial AI Workbench
 
 An on-premise, air-gapped AI workbench for confidential industrial knowledge work, built for Smart India Hackathon problem statement **SIH26117** for Mangalore Refinery and Petrochemicals Limited (MRPL).
 
-This repository extends Open WebUI with local model routing, agent tools, knowledge-base retrieval, multimodal document workflows, and sandboxed code execution. It is intended for a demonstrable local deployment on a workstation or server, not as a cloud service.
+LocalAI builds on the Open WebUI codebase with local model routing, agent tools, knowledge-base retrieval, multimodal document workflows, and sandboxed code execution. It is intended for a demonstrable local deployment on a workstation or server, not as a cloud service.
 
 ## What It Does
 
