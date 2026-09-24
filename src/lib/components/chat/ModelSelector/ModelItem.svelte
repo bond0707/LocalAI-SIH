@@ -8,8 +8,10 @@
 	import { WEBUI_API_BASE_URL, WEBUI_BASE_URL } from '$lib/constants';
 
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
+	import Spinner from '$lib/components/common/Spinner.svelte';
 	import { copyToClipboard, sanitizeResponseContent } from '$lib/utils';
 	import ArrowUpTray from '$lib/components/icons/ArrowUpTray.svelte';
+	import Play from '$lib/components/icons/Play.svelte';
 	import Check from '$lib/components/icons/Check.svelte';
 	import ModelItemMenu from './ModelItemMenu.svelte';
 	import EllipsisHorizontal from '$lib/components/icons/EllipsisHorizontal.svelte';
@@ -27,6 +29,8 @@
 	export let compareEnabled = false;
 
 	export let unloadModelHandler: (model: any) => void = () => {};
+	export let loadModelHandler: (model: any) => void = () => {};
+	export let modelActionInProgress: { model: string; action: 'load' | 'unload' } | null = null;
 	export let pinModelHandler: (modelId: string) => void = () => {};
 	export let deleteModelHandler: (model: any) => void = () => {};
 	export let selectionOnly = false;
@@ -267,21 +271,42 @@
 	</div>
 
 	<div class="ml-auto flex shrink-0 items-center gap-1.5 pl-2">
-		{#if !selectionOnly && $user?.role === 'admin' && item.model.loaded}
+		{#if !selectionOnly && $user?.role === 'admin' && item.model?.owned_by === 'ollama'}
+			{@const actionInProgress = modelActionInProgress?.model === item.value}
 			<Tooltip
-				content={`${$i18n.t('Eject')}`}
-				className="flex-shrink-0 group-hover/item:opacity-100 opacity-0 "
+				content={actionInProgress
+					? modelActionInProgress?.action === 'load'
+						? $i18n.t('Loading model')
+						: $i18n.t('Unloading model')
+					: item.model.loaded
+						? $i18n.t('Unload Model')
+						: $i18n.t('Load Model')}
+				className="flex-shrink-0"
 			>
 				<button
-					class="focus-ring flex"
-					aria-label={$i18n.t('Eject model')}
+					class="focus-ring flex items-center justify-center"
+					aria-label={actionInProgress
+						? modelActionInProgress?.action === 'load'
+							? $i18n.t('Loading model')
+							: $i18n.t('Unloading model')
+						: item.model.loaded
+							? $i18n.t('Unload Model')
+							: $i18n.t('Load Model')}
+					disabled={modelActionInProgress !== null}
 					on:click={(e) => {
 						e.preventDefault();
 						e.stopPropagation();
-						unloadModelHandler(item.value);
+						if (item.model.loaded) unloadModelHandler(item.value);
+						else loadModelHandler(item.value);
 					}}
 				>
-					<ArrowUpTray className="size-3" />
+					{#if actionInProgress}
+						<Spinner className="size-3" />
+					{:else if item.model.loaded}
+						<ArrowUpTray className="size-3" />
+					{:else}
+						<Play className="size-3" />
+					{/if}
 				</button>
 			</Tooltip>
 		{/if}

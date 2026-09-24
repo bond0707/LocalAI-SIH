@@ -14,7 +14,7 @@
 
 	import { deleteModel, getOllamaVersion, pullModel } from '$lib/apis/ollama';
 	import { deleteModelById } from '$lib/apis/models';
-	import { unloadModel } from '$lib/apis';
+	import { loadModel, unloadModel } from '$lib/apis';
 	import {
 		downloadProviderModel,
 		getErrorMessage,
@@ -87,6 +87,7 @@
 	let dropdownPosition = { top: 0, left: 0, maxHeight: undefined as number | undefined };
 	let positionFrame: number | undefined;
 	let settleTimers: number[] = [];
+	let modelActionInProgress: { model: string; action: 'load' | 'unload' } | null = null;
 
 	const portal = (node: HTMLElement) => {
 		document.body.appendChild(node);
@@ -862,18 +863,42 @@
 	};
 
 	const unloadModelHandler = async (model: string) => {
-		const res = await unloadModel(localStorage.token, model).catch((error) => {
-			toast.error($i18n.t('Error unloading model: {{error}}', { error }));
-		});
+		await runModelMemoryAction(model, false);
+	};
 
-		if (res) {
-			toast.success($i18n.t('Model unloaded successfully'));
+	const loadModelHandler = async (model: string) => {
+		await runModelMemoryAction(model, true);
+	};
+
+	const runModelMemoryAction = async (model: string, load: boolean) => {
+		if (modelActionInProgress) return;
+		modelActionInProgress = { model, action: load ? 'load' : 'unload' };
+		try {
+			if (load) {
+				await loadModel(localStorage.token, model);
+				toast.success($i18n.t('Model loaded successfully'));
+			} else {
+				await unloadModel(localStorage.token, model);
+				toast.success($i18n.t('Model unloaded successfully'));
+			}
+			// Reflect the confirmed action immediately in the open selector.
+			models.update((current) =>
+				current.map((entry) => (entry.id === model ? { ...entry, loaded: load } : entry))
+			);
 			models.set(
 				await getModels(
 					localStorage.token,
 					$config?.features?.enable_direct_connections && ($settings?.directConnections ?? null)
 				)
 			);
+		} catch (error) {
+			toast.error(
+				load
+					? $i18n.t('Error loading model: {{error}}', { error })
+					: $i18n.t('Error unloading model: {{error}}', { error })
+			);
+		} finally {
+			modelActionInProgress = null;
 		}
 	};
 
@@ -1168,6 +1193,8 @@
 										value={primaryValue}
 										{pinModelHandler}
 										{unloadModelHandler}
+										{loadModelHandler}
+										{modelActionInProgress}
 										{deleteModelHandler}
 										{selectionOnly}
 										{compareEnabled}

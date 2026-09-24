@@ -930,6 +930,45 @@ class ModelUnloadForm(BaseModel):
     model: str
 
 
+@app.post('/api/models/load')
+async def load_model(request: Request, form_data: ModelUnloadForm, user=Depends(get_admin_user)):
+    """Load an Ollama model using the server's normal keep-alive duration."""
+    model_id = form_data.model
+    ollama_models = getattr(request.app.state, 'OLLAMA_MODELS', None) or {}
+    if model_id not in ollama_models:
+        await get_all_models(request, user=user)
+        ollama_models = getattr(request.app.state, 'OLLAMA_MODELS', None) or {}
+    if model_id not in ollama_models:
+        raise HTTPException(status_code=404, detail=ERROR_MESSAGES.MODEL_NOT_FOUND(model_id))
+
+    config = await Config.get_many('ollama.base_urls', 'ollama.api_configs')
+    base_urls = config.get('ollama.base_urls') or []
+    api_configs = config.get('ollama.api_configs') or {}
+    errors = []
+    for idx in ollama_models[model_id].get('urls', []):
+        url = base_urls[idx]
+        api_config = api_configs.get(str(idx), api_configs.get(url, {}))
+        actual_model = strip_provider_model_prefix(model_id, api_config.get('prefix_id'))
+        # Omitting keep_alive preserves Ollama's configured/default timeout instead of
+        # pinning the model indefinitely (which is displayed as hundreds of years).
+        payload = JSONCodec.dumps({'model': actual_model, 'prompt': ''})
+        try:
+            timeout = aiohttp.ClientTimeout(total=300)
+            async with aiohttp.ClientSession(timeout=timeout, trust_env=True) as session:
+                headers = {'Content-Type': 'application/json'}
+                if api_config.get('key'):
+                    headers['Authorization'] = f"Bearer {api_config['key']}"
+                async with session.post(f'{url}/api/generate', data=payload, headers=headers) as response:
+                    if not response.ok:
+                        errors.append({'url_idx': idx, 'error': await response.text()})
+        except Exception as exc:
+            log.exception('Failed to load model on Ollama node %s', idx)
+            errors.append({'url_idx': idx, 'error': str(exc)})
+    if errors:
+        raise HTTPException(status_code=500, detail=f'Failed to load model: {errors}')
+    return {'status': True}
+
+
 @app.post('/api/models/unload')
 async def unload_model(request: Request, form_data: ModelUnloadForm, user=Depends(get_admin_user)):
     """

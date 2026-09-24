@@ -213,6 +213,23 @@ export const unloadModel = async (token: string, model: string) => {
 	return res;
 };
 
+export const loadModel = async (token: string, model: string) => {
+	const res = await fetch(`${WEBUI_BASE_URL}/api/models/load`, {
+		method: 'POST',
+		headers: {
+			Accept: 'application/json',
+			'Content-Type': 'application/json',
+			...(token && { authorization: `Bearer ${token}` })
+		},
+		body: JSON.stringify({ model })
+	});
+	if (!res.ok) {
+		const error = await res.json().catch(() => ({}));
+		throw error.detail ?? 'Failed to load model';
+	}
+	return res.json();
+};
+
 type ChatCompletedForm = {
 	model: string;
 	messages: Record<string, unknown>[];

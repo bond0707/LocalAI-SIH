@@ -17,7 +17,7 @@
 		getOllamaConfig,
 		getOllamaModels
 	} from '$lib/apis/ollama';
-	import { getModels } from '$lib/apis';
+	import { getModels, loadModel, unloadModel } from '$lib/apis';
 
 	import Modal from '$lib/components/common/Modal.svelte';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
@@ -46,6 +46,27 @@
 
 	let modelLoading = false;
 	let modelTag = '';
+	let modelMemoryAction = false;
+
+	const manageModelMemory = async (load: boolean) => {
+		if (!deleteModelTag || modelMemoryAction) return;
+		modelMemoryAction = true;
+		try {
+			if (load) {
+				await loadModel(localStorage.token, deleteModelTag);
+				toast.success($i18n.t('Model loaded successfully'));
+			} else {
+				await unloadModel(localStorage.token, deleteModelTag);
+				toast.success($i18n.t('Model unloaded successfully'));
+			}
+			ollamaModels = await getOllamaModels(localStorage.token, urlIdx);
+			await models.set(await getModels(localStorage.token));
+		} catch (error) {
+			toast.error(String(error));
+		} finally {
+			modelMemoryAction = false;
+		}
+	};
 
 	let createModelLoading = false;
 	let createModelName = '';
@@ -815,6 +836,30 @@
 							{/if}
 						{/each}
 					{/if}
+				</div>
+
+				<div>
+					<div class=" mb-2 text-sm font-normal">{$i18n.t('Load or unload a model')}</div>
+					<div class="flex w-full gap-2">
+						<div class="flex-1">
+							<SettingsSelect
+								bind:value={deleteModelTag}
+								className="w-full"
+								placeholder={$i18n.t('Select a model')}
+							>
+								<option value="" disabled selected>{$i18n.t('Select a model')}</option>
+								{#each ollamaModels as model}
+									<option value={model.id} class="bg-gray-50 dark:bg-gray-700">{model.name}</option>
+								{/each}
+							</SettingsSelect>
+						</div>
+						<button class={iconButtonClass} type="button" disabled={!deleteModelTag || modelMemoryAction} on:click={() => manageModelMemory(true)}>
+							{$i18n.t('Load')}
+						</button>
+						<button class={iconButtonClass} type="button" disabled={!deleteModelTag || modelMemoryAction} on:click={() => manageModelMemory(false)}>
+							{$i18n.t('Unload')}
+						</button>
+					</div>
 				</div>
 
 				<div>
