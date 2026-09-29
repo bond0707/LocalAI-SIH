@@ -87,7 +87,12 @@
 	let dropdownPosition = { top: 0, left: 0, maxHeight: undefined as number | undefined };
 	let positionFrame: number | undefined;
 	let settleTimers: number[] = [];
+	let modelStateRefreshTimer: number | undefined;
 	let modelActionInProgress: { model: string; action: 'load' | 'unload' } | null = null;
+	$: if (!show && modelStateRefreshTimer !== undefined) {
+		window.clearInterval(modelStateRefreshTimer);
+		modelStateRefreshTimer = undefined;
+	}
 
 	const portal = (node: HTMLElement) => {
 		document.body.appendChild(node);
@@ -209,8 +214,30 @@
 			for (const delay of [0, 50, 150]) {
 				window.setTimeout(focusSearchInput, delay);
 			}
+			await refreshLiveModelState();
+			if (show && !selectionOnly && $user?.role === 'admin') {
+				modelStateRefreshTimer = window.setInterval(refreshLiveModelState, 3000);
+			}
 		} else {
+			if (modelStateRefreshTimer !== undefined) {
+				window.clearInterval(modelStateRefreshTimer);
+				modelStateRefreshTimer = undefined;
+			}
 			document.getElementById(`model-selector-${id}-button`)?.blur();
+		}
+	};
+
+	const refreshLiveModelState = async () => {
+		try {
+			const freshModels = await getModels(
+				localStorage.token,
+				$config?.features?.enable_direct_connections && ($settings?.directConnections ?? null),
+				false,
+				true
+			);
+			models.set(freshModels);
+		} catch (error) {
+			console.warn('Could not refresh live model load state:', error);
 		}
 	};
 
@@ -832,6 +859,7 @@
 			window.removeEventListener('scroll', handleScroll, true);
 			window.visualViewport?.removeEventListener('resize', scheduleSettledPositionUpdates);
 			window.visualViewport?.removeEventListener('scroll', schedulePositionUpdate);
+			if (modelStateRefreshTimer !== undefined) window.clearInterval(modelStateRefreshTimer);
 		};
 	});
 
@@ -885,12 +913,7 @@
 			models.update((current) =>
 				current.map((entry) => (entry.id === model ? { ...entry, loaded: load } : entry))
 			);
-			models.set(
-				await getModels(
-					localStorage.token,
-					$config?.features?.enable_direct_connections && ($settings?.directConnections ?? null)
-				)
-			);
+			await refreshLiveModelState();
 		} catch (error) {
 			toast.error(
 				load

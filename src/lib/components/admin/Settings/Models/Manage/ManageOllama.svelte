@@ -60,13 +60,16 @@
 				toast.success($i18n.t('Model unloaded successfully'));
 			}
 			ollamaModels = await getOllamaModels(localStorage.token, urlIdx);
-			await models.set(await getModels(localStorage.token));
+			await models.set(await getModels(localStorage.token, null, false, true));
 		} catch (error) {
 			toast.error(String(error));
 		} finally {
 			modelMemoryAction = false;
 		}
 	};
+
+	const isOllamaModelLoaded = (modelId: string) =>
+		$models.some((model) => model.id === modelId && model.owned_by === 'ollama' && model.loaded);
 
 	let createModelLoading = false;
 	let createModelName = '';
@@ -619,6 +622,7 @@
 		if (ollamaModels) {
 			loading = false;
 		}
+		await models.set(await getModels(localStorage.token, null, false, true).catch(() => $models));
 	};
 
 	$: if (urlIdx !== null) {
@@ -849,14 +853,16 @@
 							>
 								<option value="" disabled selected>{$i18n.t('Select a model')}</option>
 								{#each ollamaModels as model}
-									<option value={model.id} class="bg-gray-50 dark:bg-gray-700">{model.name}</option>
+									<option value={model.id} class="bg-gray-50 dark:bg-gray-700">
+										{model.name}{isOllamaModelLoaded(model.id) ? ' · Loaded' : ''}
+									</option>
 								{/each}
 							</SettingsSelect>
 						</div>
-						<button class={iconButtonClass} type="button" disabled={!deleteModelTag || modelMemoryAction} on:click={() => manageModelMemory(true)}>
+						<button class={iconButtonClass} type="button" disabled={!deleteModelTag || modelMemoryAction || isOllamaModelLoaded(deleteModelTag)} on:click={() => manageModelMemory(true)}>
 							{$i18n.t('Load')}
 						</button>
-						<button class={iconButtonClass} type="button" disabled={!deleteModelTag || modelMemoryAction} on:click={() => manageModelMemory(false)}>
+						<button class={iconButtonClass} type="button" disabled={!deleteModelTag || modelMemoryAction || !isOllamaModelLoaded(deleteModelTag)} on:click={() => manageModelMemory(false)}>
 							{$i18n.t('Unload')}
 						</button>
 					</div>
