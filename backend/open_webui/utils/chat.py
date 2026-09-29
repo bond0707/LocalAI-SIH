@@ -245,34 +245,7 @@ async def generate_chat_completion(
                 if selected_model:
                     await check_model_access(user, selected_model)
 
-        # Fallback: if generate_chat_completion is called with RouteLLM router model directly
-        if not selected_model_id and (model.get('owned_by') == 'router' or model.get('id') == 'routellm-auto-router'):
-            from open_webui.routellm_router import router_controller
-            available_model_ids = [
-                m['id']
-                for m in list(request.app.state.MODELS.values())
-                if m.get('owned_by') not in ('arena', 'router') and m.get('id') != 'routellm-auto-router'
-            ]
-            last_prompt = ""
-            for msg in reversed(form_data.get("messages", [])):
-                if msg.get("role") == "user":
-                    c = msg.get("content", "")
-                    if isinstance(c, str):
-                        last_prompt = c
-                    elif isinstance(c, list):
-                        last_prompt = "\n".join(
-                            part.get("text", "") for part in c if isinstance(part, dict) and part.get("type") == "text"
-                        )
-                    break
-            routing_res = router_controller.route_request(last_prompt, available_models=available_model_ids)
-            selected_model_id = routing_res['selected_model_id']
-            metadata['routing_info'] = routing_res
-            form_data['model'] = selected_model_id
 
-            if not bypass_filter and user.role == 'user':
-                selected_model = request.app.state.MODELS.get(selected_model_id)
-                if selected_model:
-                    await check_model_access(user, selected_model)
 
         if selected_model_id:
             routing_info = metadata.get('routing_info')

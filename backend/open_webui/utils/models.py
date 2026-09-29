@@ -95,27 +95,6 @@ async def get_all_models(request, refresh: bool = False, user: UserModel = None)
     if len(models) == 0:
         return []
 
-    # Add RouteLLM Sovereign Task Auto-Router
-    router_model = {
-        'id': 'routellm-auto-router',
-        'name': 'Auto',
-        'info': {
-            'meta': {
-                'capabilities': {
-                    'vision': True,
-                    'status_updates': True,
-                    'code_interpreter': True,
-                },
-                'tags': [{'name': 'auto-router'}, {'name': 'routellm'}, {'name': 'sovereign'}],
-            },
-        },
-        'object': 'model',
-        'created': 0,
-        'owned_by': 'router',
-        'router': True,
-    }
-    models.append(router_model)
-
     # One query per type: the global sets are subsets of the active sets, so
     # deriving them from the same rows halves the function-table queries.
     if ENABLE_PLUGINS:

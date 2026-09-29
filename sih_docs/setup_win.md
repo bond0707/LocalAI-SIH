@@ -406,54 +406,120 @@ Instead of running two separate terminal processes for frontend and backend:
 
 ## 6. Accessing & Configuring the Workbench
 
-1. Open your browser and navigate to:
+Follow these post-launch steps in order after starting the backend and frontend services.
 
-   * **`http://localhost:8080`** (if using Single-Port Build)
-   * **`http://localhost:5173`** (if using Vite Dev Server)
-2. **First-Time Admin Setup**:
+### 6.1 Access the Web Interface
 
-   * Click **Sign Up** and create the first account.
-   * The first registered user is automatically designated as the **Local Admin**.
-   * All user accounts, credentials, and settings are saved securely in **PostgreSQL** under the `localai` database.
-3. **Verify Model Detection**:
+Open your browser and navigate to:
 
-   * On the chat page, click the model selector in the top-left corner.
-   * Ensure local models (`qwen3.5:9b`, `deepseek-r1:8b`, `smollm2:1.7b`, `qwen3.5:0.8b`, `qwen3.5:4b`) appear.
-4. **Connect Open Terminal Execution Sandbox**:
+* **`http://localhost:8080`** (if using Single-Port Build)
+* **`http://localhost:5173`** (if using Vite Dev Server)
 
-   * Navigate to **Admin Panel $\rightarrow$ Settings $\rightarrow$ Integrations** (or **Terminals**).
-   * Under **Terminal Servers**, click **`+` (Add Connection)**:
-     * **Name**: `Local Open Terminal`
-     * **URL**: `http://localhost:8000`
-     * **Auth Type**: `bearer`
-     * **API Key**: `local-open-terminal-api-key`
-   * Click **Verify**. Open-WebUI will query the endpoint and display a green success indicator detecting `terminal` / `orchestrator`.
-   * Click **Save** at the bottom of the page.
-   * *Chat Execution Test*: Ask the model in chat to run a Python calculation script. The script executes securely inside the `localai-open-terminal` Docker container, returning stdout and charts directly to chat without host system access.
-5. **Verify Docling Content Extraction in Admin Panel**:
+### 6.2 First-Time Admin Account Creation
 
-   * Navigate to: **Admin Panel $\rightarrow$ Settings $\rightarrow$ Documents**.
-   * Verify that **Content Extraction Engine** is set to **`Docling`**.
-   * Verify **Docling Server URL** is set to `http://localhost:5001`.
-   * *(Optional)* Fine-tune Docling parameters as JSON:
-     ```json
-     {
-       "ocr_engine": "easyocr",
-       "table_mode": "accurate",
-       "force_ocr": "true"
+1. Click **Sign Up** and create the primary account.
+2. The first registered user is automatically designated as the **Local Admin**.
+3. All user accounts, credentials, and settings are saved securely in **PostgreSQL** under the `localai` database.
+
+### 6.3 Verify Model Detection
+
+1. On the chat page, click the model selector in the top-left corner.
+2. Verify that all local Ollama models appear in the dropdown:
+   * `deepseek-r1:8b` (Deep Reasoning)
+   * `qwen3.5:9b` (Heavy Coding & Architecture)
+   * `qwen3.5:4b` (Midweight Coding & General)
+   * `smollm2:1.7b` (Lightweight General & Summaries)
+   * `qwen3.5:0.8b` (Ultra-Compact Edge Execution)
+
+### 6.4 Connect Open Terminal Execution Sandbox
+
+Connect Open-WebUI to the isolated Docker terminal execution container:
+
+1. Navigate to: **Admin Panel $\rightarrow$ Settings $\rightarrow$ Integrations** (or **Terminals**).
+2. Under **Terminal Servers**, click **`+` (Add Connection)**:
+   * **Name**: `Local Open Terminal`
+   * **URL**: `http://localhost:8000`
+   * **Auth Type**: `bearer`
+   * **API Key**: `local-open-terminal-api-key`
+3. Click **Verify**. Open-WebUI will query the endpoint and display a green success indicator confirming connection to `terminal` / `orchestrator`.
+4. Click **Save** at the bottom of the page.
+5. *Chat Execution Test*:
+   * In any chat conversation, verify that the model or prompt can call code execution.
+   * Prompt: *"Write and run a Python script to calculate the octane rating formula."*
+   * The script executes securely inside the `localai-open-terminal` Docker container, returning stdout and charts directly to chat without host system access.
+
+### 6.5 Configure Docling Document Extraction & Multilingual OCR
+
+Configure the document ingestion pipeline to use Docling with high-accuracy multilingual OCR (English, Hindi, Kannada) for refinery SOPs and technical manuals:
+
+1. Navigate to: **Admin Panel $\rightarrow$ Settings $\rightarrow$ Documents**.
+2. Set **Content Extraction Engine** to: **`Docling`**.
+3. Set **Docling Server URL** to: **`http://localhost:5001`**.
+4. In the **Docling Parameters (JSON)** field, paste the following configuration:
+   ```json
+   {
+     "ocr_engine": "easyocr",
+     "table_mode": "accurate",
+     "force_ocr": true,
+     "ocr_options": {
+       "lang": ["en", "hi", "kn"]
      }
-     ```
-   * Click **Save** at the bottom of the page.
-6. **Verify Knowledge Base (RAG with Docling + Qdrant)**:
+   }
+   ```
 
-   * Go to **Workspace $\rightarrow$ Knowledge**.
-   * Click `+` to create a Knowledge Base (e.g., `MRPL-SOPs`).
-   * Upload sample industrial documents (PDFs, scans, DOCX, CSV, TXT).
-   * **Pipeline execution check**:
-     1. Docling receives the document and extracts OCR text & tables.
-     2. Ollama (`nomic-embed-text`) calculates 768-dim embeddings.
-     3. Qdrant indexes the vectors in local storage.
-   * In chat, tag `#MRPL-Refinery-SOPs` to verify grounded responses.
+   *Configuration Breakdown:** `"ocr_engine": "easyocr"`: Robust neural OCR capable of parsing non-standard typographic fonts and scans.
+   * `"table_mode": "accurate"`: Deep layout table recognition for complex, multi-column technical datasheets.
+   * `"force_ocr": true`: Runs OCR on all document pages to capture text flattened as raster images.
+   * `"ocr_options": {"lang": ["en", "hi", "kn"]}`: Activates trilingual OCR recognition for English (`en`), Hindi (`hi`), and Kannada (`kn`) for regional refinery operational documents.
+5. Click **Save** at the bottom of the page.
+
+### 6.6 Register & Configure Warm Auto-Router (`Auto` Pipe Function)
+
+The **Warm Auto-Router** dynamically classifies incoming user prompts (Reasoning, Coding, General) and inspects Ollama's active VRAM state via `GET /api/ps` to route to an already-warm model, eliminating model swapping delays.
+
+1. Navigate to: **Admin Panel $\rightarrow$ Functions** (or **Workspace $\rightarrow$ Functions**).
+2. Click **`+` (Add Function)** in the top right.
+3. Fill in the function details:
+   * **Name**: `Auto`
+   * **ID**: `warm_auto_router`
+   * **Description**: `Warm-First VRAM Dynamic Model Router for Reasoning, Coding, and General tasks`
+4. Copy and paste the complete Python code from [`backend/open_webui/warm_auto_router.py`](backend/open_webui/warm_auto_router.py) into the editor.
+5. Click **Save**.
+6. On the Functions list, toggle the switch next to **Auto** to **ON (Active)**.
+7. Click the **Valves** button (gear icon) next to `Auto` to review/adjust model candidate lists:
+   * **`OLLAMA_BASE_URL`**: `http://localhost:11434`
+   * **`REASONING_MODELS`**: `deepseek-r1:8b`
+   * **`CODER_MODELS`**: `qwen3.5:9b, qwen3.5:4b`
+   * **`GENERAL_MODELS`**: `smollm2:1.7b, qwen3.5:0.8b` *(Note: `qwen3.5:9b` is excluded from General so quick chat queries route to ultra-lightweight models without triggering heavy 9B model loads).*
+8. Click **Save Valves**.
+9. *How to Use*:
+   * In any chat, open the model picker and select **`Auto`**.
+   * As you chat, the router emits live visual status indicators (e.g. `[Auto Router] Reasoning query -> deepseek-r1:8b (warm in VRAM)` or `[Auto Router] Coding query -> qwen3.5:9b (cold start)`) before streaming the response.
+
+### 6.7 VRAM Warmth Optimization (Disable Background Task Eviction)
+
+By default, Open-WebUI triggers background asynchronous tasks immediately after your first chat prompt to generate titles and tags. If left at default, these background calls request a different model from Ollama, evicting your primary reasoning or coding model from GPU VRAM!
+
+To keep large models resident in GPU memory:
+
+1. Navigate to: **Admin Panel $\rightarrow$ Settings $\rightarrow$ Tasks**.
+2. Under **Task Settings**:
+   * Turn **OFF** **Title Generation**.
+   * Turn **OFF** **Tags Generation**.
+   * Turn **OFF** **Follow-up / Autocomplete Generation**.
+     *(Alternatively, if automated titles are required, explicitly set **Task Model** to a lightweight pinned model such as `smollm2:1.7b` or `qwen3.5:0.8b`).*
+3. Click **Save**.
+
+### 6.8 Verify Knowledge Base (RAG with Docling + Qdrant)
+
+1. Navigate to: **Workspace $\rightarrow$ Knowledge**.
+2. Click **`+`** to create a Knowledge Base (e.g., `MRPL-Refinery-SOPs`).
+3. Upload sample industrial documents (PDFs, scans, DOCX, CSV, TXT) including multilingual scans.
+4. **Pipeline Execution Lifecycle**:
+   1. The document is dispatched to Docling (`http://localhost:5001`), extracting layout, tables, and multilingual text.
+   2. Open-WebUI splits the text into chunks and calls Ollama (`nomic-embed-text`) for 768-dimensional dense vector embeddings.
+   3. Embeddings and document payloads are indexed into Qdrant (`http://localhost:6333`).
+5. In chat, type `#MRPL-Refinery-SOPs` to attach the collection and test grounded domain question answering.
 
 ---
 
@@ -527,11 +593,12 @@ docker compose -f docker-compose.services.yaml up -d
 
 ## 8. Codebase Reference for Developers
 
-| Component                                   | File Path                                                            | Purpose                                                                   |
-| :------------------------------------------ | :------------------------------------------------------------------- | :------------------------------------------------------------------------ |
-| **Terminal Utilities & Orchestrator** | `backend/open_webui/utils/terminals.py`                            | Detects orchestrator vs plain terminal, formats URLs, manages context IDs |
-| **Terminal Routers**                  | `backend/open_webui/routers/terminals.py`                          | Proxies chat and automation terminal commands to Open Terminal backend    |
-| **Terminal Settings UI**              | `src/lib/components/admin/Settings/Integrations.svelte`            | Admin panel interface for managing terminal connections                   |
-| **Docling Loader**                    | `backend/open_webui/retrieval/loaders/main.py` (`DoclingLoader`) | Dispatches uploaded files to Docling REST API and extracts Markdown       |
-| **PostgreSQL Engine**                 | `backend/open_webui/internal/db.py`                                | Async PostgreSQL engine using`psycopg` v3 and Alembic migrations        |
-| **Qdrant Vector Client**              | `backend/open_webui/retrieval/vector/dbs/qdrant.py`                | Connects Open-WebUI knowledge base to Qdrant REST/gRPC endpoints          |
+| Component                                   | File Path                                                            | Purpose                                                                    |
+| :------------------------------------------ | :------------------------------------------------------------------- | :------------------------------------------------------------------------- |
+| **Terminal Utilities & Orchestrator** | `backend/open_webui/utils/terminals.py`                            | Detects orchestrator vs plain terminal, formats URLs, manages context IDs  |
+| **Terminal Routers**                  | `backend/open_webui/routers/terminals.py`                          | Proxies chat and automation terminal commands to Open Terminal backend     |
+| **Terminal Settings UI**              | `src/lib/components/admin/Settings/Integrations.svelte`            | Admin panel interface for managing terminal connections                    |
+| **Warm Auto-Router Pipe**             | `backend/open_webui/warm_auto_router.py`                           | Intent classification with warm VRAM model affinity and message sanitation |
+| **Docling Loader**                    | `backend/open_webui/retrieval/loaders/main.py` (`DoclingLoader`) | Dispatches uploaded files to Docling REST API and extracts Markdown        |
+| **PostgreSQL Engine**                 | `backend/open_webui/internal/db.py`                                | Async PostgreSQL engine using`psycopg` v3 and Alembic migrations         |
+| **Qdrant Vector Client**              | `backend/open_webui/retrieval/vector/dbs/qdrant.py`                | Connects Open-WebUI knowledge base to Qdrant REST/gRPC endpoints           |
