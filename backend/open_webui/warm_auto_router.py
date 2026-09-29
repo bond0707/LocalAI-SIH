@@ -29,6 +29,7 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 CATEGORY_REASONING = "Reasoning"
 CATEGORY_CODING = "Coding"
+CATEGORY_VISION = "Vision"
 CATEGORY_GENERAL = "General"
 
 # ---------------------------------------------------------------------------
@@ -124,11 +125,23 @@ def _extract_prompt_text(messages: list[dict]) -> str:
     return ""
 
 
+def _clean_base64_image(raw_img: str) -> str:
+    """Strip data URI prefix if present so Ollama receives pure base64."""
+    if not isinstance(raw_img, str):
+        return ""
+    raw = raw_img.strip()
+    if raw.startswith("data:"):
+        return raw.split(",", 1)[-1].strip()
+    return raw
+
+
 def _sanitize_messages(messages: list[dict]) -> list[dict]:
     """
     Sanitize OpenWebUI conversation history for Ollama /api/chat.
     Strips internal OpenWebUI metadata (function_call, statusHistory, UI state)
     that causes Ollama's parser to throw HTTP 400 errors.
+    Extracts multimodal images (from content parts, 'images', or 'files')
+    and strips data URI prefixes so Ollama receives valid base64 image strings.
     """
     clean = []
     for msg in messages:
@@ -140,23 +153,55 @@ def _sanitize_messages(messages: list[dict]) -> list[dict]:
             role = "user"
 
         content = msg.get("content", "")
+        images: list[str] = []
+
         if isinstance(content, list):
-            text_parts = [
-                part.get("text", "")
-                for part in content
-                if isinstance(part, dict) and part.get("type") == "text"
-            ]
+            text_parts = []
+            for part in content:
+                if not isinstance(part, dict):
+                    continue
+                part_type = part.get("type")
+                if part_type == "text":
+                    text_parts.append(part.get("text", ""))
+                elif part_type in ("image", "image_url"):
+                    img_val = part.get("image_url") or part.get("image") or part.get("url")
+                    if isinstance(img_val, dict):
+                        img_str = img_val.get("url") or img_val.get("image") or ""
+                    else:
+                        img_str = str(img_val or "")
+                    cleaned_b64 = _clean_base64_image(img_str)
+                    if cleaned_b64:
+                        images.append(cleaned_b64)
             content = "\n".join(filter(None, text_parts))
         elif not isinstance(content, str):
             content = str(content or "")
 
-        # Skip messages that have no text and are only internal tool call artifacts
-        if not content.strip() and not msg.get("images"):
+        # Also support top-level 'images' field if provided
+        raw_images = msg.get("images")
+        if isinstance(raw_images, list):
+            for raw_img in raw_images:
+                cleaned_b64 = _clean_base64_image(raw_img)
+                if cleaned_b64:
+                    images.append(cleaned_b64)
+
+        # Support 'files' if attached with image type / content_type
+        raw_files = msg.get("files")
+        if isinstance(raw_files, list):
+            for f in raw_files:
+                if isinstance(f, dict):
+                    if f.get("type") == "image" or (f.get("content_type") or "").startswith("image/"):
+                        f_url = f.get("url") or ""
+                        cleaned_b64 = _clean_base64_image(f_url)
+                        if cleaned_b64:
+                            images.append(cleaned_b64)
+
+        # Skip messages that have no text and no images (e.g. internal tool call artifacts)
+        if not content.strip() and not images:
             continue
 
-        clean_msg = {"role": role, "content": content}
-        if "images" in msg and isinstance(msg["images"], list):
-            clean_msg["images"] = msg["images"]
+        clean_msg: dict = {"role": role, "content": content}
+        if images:
+            clean_msg["images"] = images
 
         clean.append(clean_msg)
 
@@ -254,6 +299,10 @@ class Pipe:
             default="deepseek-r1:8b, qwen3.5:9b",
             description="Ordered comma-separated candidates for reasoning/math proofs",
         )
+        VISION_MODELS: str = Field(
+            default="qwen3.5:9b, qwen3.5:4b",
+            description="Ordered comma-separated candidates for vision / multimodal tasks",
+        )
         TIMEOUT_SECONDS: float = Field(
             default=180.0,
             description="Inference streaming timeout (seconds)",
@@ -273,15 +322,34 @@ class Pipe:
     # 1. Intent Classification
     # ------------------------------------------------------------------
 
-    def classify_intent(self, prompt: str) -> str:
+    def classify_intent(self, prompt: str, messages: list[dict] | None = None) -> str:
         """
-        Classify prompt into one of three domains.
+        Classify prompt/messages into one of four domains.
 
         Precedence (first match wins):
-          1. Coding   - code fences, language names, syntax tokens, error diagnostics
-          2. Reasoning - math/logic keywords, raw arithmetic expressions
-          3. General  - fallback
+          1. Vision    - images attached to messages or image content parts
+          2. Coding    - code fences, language names, syntax tokens, error diagnostics
+          3. Reasoning - math/logic keywords, raw arithmetic expressions
+          4. General   - fallback
         """
+        if messages:
+            for m in messages:
+                if not isinstance(m, dict):
+                    continue
+                if m.get("images"):
+                    return CATEGORY_VISION
+                if m.get("files") and isinstance(m["files"], list):
+                    if any(
+                        isinstance(f, dict)
+                        and (f.get("type") == "image" or (f.get("content_type") or "").startswith("image/"))
+                        for f in m["files"]
+                    ):
+                        return CATEGORY_VISION
+                content = m.get("content")
+                if isinstance(content, list):
+                    if any(isinstance(p, dict) and p.get("type") in ("image", "image_url") for p in content):
+                        return CATEGORY_VISION
+
         if not prompt or not prompt.strip():
             return CATEGORY_GENERAL
 
@@ -343,6 +411,7 @@ class Pipe:
         candidate_valve = {
             CATEGORY_REASONING: self.valves.REASONING_MODELS,
             CATEGORY_CODING: self.valves.CODER_MODELS,
+            CATEGORY_VISION: self.valves.VISION_MODELS,
             CATEGORY_GENERAL: self.valves.GENERAL_MODELS,
         }.get(category, self.valves.GENERAL_MODELS)
 
@@ -387,8 +456,9 @@ class Pipe:
           7. Yield each content token string.
           8. Handle ConnectError, TimeoutException, HTTP errors, malformed JSON.
         """
-        prompt = _extract_prompt_text(body.get("messages", []))
-        category = self.classify_intent(prompt)
+        messages = body.get("messages", [])
+        prompt = _extract_prompt_text(messages)
+        category = self.classify_intent(prompt, messages=messages)
         selected_model, is_warm = await self.select_model(category)
         warm_label = "Warm" if is_warm else "Cold"
 

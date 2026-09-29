@@ -18,6 +18,7 @@ from open_webui.warm_auto_router import (
     Pipe,
     CATEGORY_CODING,
     CATEGORY_REASONING,
+    CATEGORY_VISION,
     CATEGORY_GENERAL,
     _normalize_model_id,
     _is_warm_match,
@@ -156,6 +157,20 @@ class TestClassifyIntent:
     def test_whitespace_only(self, pipe):
         assert pipe.classify_intent("   ") == CATEGORY_GENERAL
 
+    def test_vision_images_list(self, pipe):
+        messages = [{"role": "user", "content": "What is in this diagram?", "images": ["data:image/png;base64,..."]}]
+        assert pipe.classify_intent("What is in this diagram?", messages=messages) == CATEGORY_VISION
+
+    def test_vision_content_parts(self, pipe):
+        messages = [{
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Describe the equipment in this photo"},
+                {"type": "image_url", "image_url": "data:image/png;base64,..."}
+            ]
+        }]
+        assert pipe.classify_intent("Describe the equipment in this photo", messages=messages) == CATEGORY_VISION
+
 
 # ---------------------------------------------------------------------------
 # Model Selection (synchronous helper, no async needed)
@@ -208,6 +223,28 @@ class TestSelectModelFromCandidates:
         assert model == "deepseek-r1:8b"
         assert is_warm is True
 
+    def test_vision_cold_start(self, pipe):
+        model, is_warm = pipe.select_model_from_candidates(
+            CATEGORY_VISION, []
+        )
+        assert model == "qwen3.5:9b"
+        assert is_warm is False
+
+    def test_vision_warm_secondary(self, pipe):
+        # qwen3.5:9b is cold, but secondary candidate qwen3.5:4b is warm in VRAM
+        model, is_warm = pipe.select_model_from_candidates(
+            CATEGORY_VISION, ["qwen3.5:4b"]
+        )
+        assert model == "qwen3.5:4b"
+        assert is_warm is True
+
+    def test_vision_warm_first(self, pipe):
+        model, is_warm = pipe.select_model_from_candidates(
+            CATEGORY_VISION, ["qwen3.5:9b"]
+        )
+        assert model == "qwen3.5:9b"
+        assert is_warm is True
+
     def test_empty_candidates_fallback(self, pipe):
         # Override CODER_MODELS to empty
         pipe.valves.CODER_MODELS = ""
@@ -252,3 +289,63 @@ class TestSanitizeMessages:
         assert clean[0] == {"role": "user", "content": "hello"}
         assert clean[1] == {"role": "assistant", "content": "Hi there!"}
         assert clean[2] == {"role": "user", "content": "Solve step by step"}
+
+    def test_multimodal_image_url_extracted_and_trimmed(self):
+        from open_webui.warm_auto_router import _sanitize_messages
+        raw = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Describe this screenshot"},
+                    {"type": "image_url", "image_url": {"url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA"}},
+                ],
+            }
+        ]
+        clean = _sanitize_messages(raw)
+        assert len(clean) == 1
+        assert clean[0]["role"] == "user"
+        assert clean[0]["content"] == "Describe this screenshot"
+        assert clean[0]["images"] == ["iVBORw0KGgoAAAANSUhEUgAA"]
+
+    def test_multimodal_image_without_text(self):
+        from open_webui.warm_auto_router import _sanitize_messages
+        raw = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,abc123xyz"}},
+                ],
+            }
+        ]
+        clean = _sanitize_messages(raw)
+        assert len(clean) == 1
+        assert clean[0]["role"] == "user"
+        assert clean[0]["content"] == ""
+        assert clean[0]["images"] == ["abc123xyz"]
+
+    def test_top_level_images_data_uri_cleaned(self):
+        from open_webui.warm_auto_router import _sanitize_messages
+        raw = [
+            {
+                "role": "user",
+                "content": "Look at this",
+                "images": ["data:image/png;base64,RAWBASE64HERE"],
+            }
+        ]
+        clean = _sanitize_messages(raw)
+        assert len(clean) == 1
+        assert clean[0]["images"] == ["RAWBASE64HERE"]
+
+    def test_files_with_image_type_extracted(self):
+        from open_webui.warm_auto_router import _sanitize_messages
+        raw = [
+            {
+                "role": "user",
+                "content": "Analyze drawing",
+                "files": [{"type": "image", "url": "data:image/png;base64,DRAWINGBASE64"}],
+            }
+        ]
+        clean = _sanitize_messages(raw)
+        assert len(clean) == 1
+        assert clean[0]["images"] == ["DRAWINGBASE64"]
+
