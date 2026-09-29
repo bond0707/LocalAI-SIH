@@ -2397,63 +2397,7 @@ async def process_chat_payload(request, form_data, user, metadata, model):
             form_data['model'] = selected_model_id
             metadata['selected_model_id'] = selected_model_id
 
-    # RouteLLM model resolution — dynamically inspect user prompt & files to select optimal open-weight model
-    if model.get('owned_by') == 'router' or model.get('id') == 'routellm-auto-router':
-        from open_webui.routellm_router import router_controller
 
-        available_model_ids = [
-            available_model['id']
-            for available_model in request.app.state.MODELS.values()
-            if available_model.get('owned_by') not in ('arena', 'router')
-            and available_model['id'] != 'routellm-auto-router'
-        ]
-
-        # Extract prompt content
-        last_user_prompt = ""
-        for m in reversed(form_data.get('messages', [])):
-            if m.get('role') == 'user':
-                c = m.get('content')
-                if isinstance(c, str):
-                    last_user_prompt = c
-                elif isinstance(c, list):
-                    last_user_prompt = "\n".join(
-                        part.get('text', '') for part in c if isinstance(part, dict) and part.get('type') == 'text'
-                    )
-                break
-
-        files = metadata.get('files', []) or form_data.get('files', [])
-
-        routing_decision = router_controller.route_request(
-            prompt=last_user_prompt,
-            files=files,
-            available_models=available_model_ids,
-        )
-
-        selected_model_id = routing_decision['selected_model_id']
-        category = routing_decision['category']
-        score = routing_decision['score']
-        reason = routing_decision['reason']
-
-        selected_model = request.app.state.MODELS.get(selected_model_id)
-        if selected_model:
-            model = selected_model
-            form_data['model'] = selected_model_id
-            metadata['selected_model_id'] = selected_model_id
-            metadata['routing_info'] = routing_decision
-
-        # Emit real-time status badge to client
-        event_emitter = await get_event_emitter(metadata)
-        if event_emitter:
-            await event_emitter(
-                {
-                    'type': 'status',
-                    'data': {
-                        'action': 'model_routing',
-                        'description': f"Auto-routed to {selected_model_id} ({reason})",
-                        'done': True,
-                    },
-                }
-            )
 
     # Captured before apply_params_to_form_data pops 'params'; feeds metadata['system_prompt'] below
     model_system_prompt = (form_data.get('params') or {}).get('system')
